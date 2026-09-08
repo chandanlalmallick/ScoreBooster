@@ -1,14 +1,474 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ScoreBooster</title>
-    <link rel="stylesheet" href="./global.css" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="./index.ts"></script>
-  </body>
-</html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScoreBooster - Mock Exam Platform</title>
 
+  <!-- Uses your existing uploaded global.css file -->
+  <link rel="stylesheet" href="./global.css" />
+
+  <!-- React 18 and Babel Standalone for direct in-browser execution -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Exam configurations based on your repository exams
+    const EXAMS = [
+      {
+        id: "ssc-cgl",
+        name: "SSC CGL (Tier I)",
+        badge: "Staff Selection",
+        description: "Comprehensive mock test for SSC Combined Graduate Level Tier-I covering Quantitative Aptitude, Reasoning, English, and General Awareness.",
+        duration: 3600,
+        marking: { correct: 2, wrong: -0.5 },
+        sections: [
+          { name: "General Intelligence & Reasoning", questions: 25 },
+          { name: "General Awareness", questions: 25 },
+          { name: "Quantitative Aptitude", questions: 25 },
+          { name: "English Comprehension", questions: 25 }
+        ]
+      },
+      {
+        id: "ssc-chsl",
+        name: "SSC CHSL (Tier I)",
+        badge: "Staff Selection",
+        description: "Tier I practice mock covering Basic Arithmetic, General Intelligence, English Language, and General Knowledge.",
+        duration: 3600,
+        marking: { correct: 2, wrong: -0.5 },
+        sections: [
+          { name: "General Intelligence", questions: 25 },
+          { name: "General Awareness", questions: 25 },
+          { name: "Quantitative Aptitude", questions: 25 },
+          { name: "English Language", questions: 25 }
+        ]
+      },
+      {
+        id: "banking",
+        name: "Banking (IBPS / SBI PO)",
+        badge: "Banking Exam",
+        description: "Speed and accuracy mock test focusing on Data Interpretation, Quantitative Ability, Reasoning, and English.",
+        duration: 3600,
+        marking: { correct: 1, wrong: -0.25 },
+        sections: [
+          { name: "English Language", questions: 30 },
+          { name: "Quantitative Aptitude", questions: 35 },
+          { name: "Reasoning Ability", questions: 35 }
+        ]
+      },
+      {
+        id: "csir-net",
+        name: "CSIR NET (Mathematical Sciences)",
+        badge: "Research / Lectureship",
+        description: "Higher Mathematics practice paper covering Part A (General Aptitude), Part B (Core Mathematics), and Part C (Advanced Applications).",
+        duration: 10800,
+        marking: { correct: 3, wrong: -0.75 },
+        sections: [
+          { name: "Part A - General Science & Aptitude", questions: 20 },
+          { name: "Part B - Mathematics Core", questions: 40 },
+          { name: "Part C - Advanced Mathematics", questions: 60 }
+        ]
+      },
+      {
+        id: "ugc-net",
+        name: "UGC NET (Paper 1)",
+        badge: "National Eligibility",
+        description: "General Paper on Teaching and Research Aptitude evaluating Reasoning, People & Environment, and Higher Education systems.",
+        duration: 3600,
+        marking: { correct: 2, wrong: 0 },
+        sections: [
+          { name: "Teaching & Research Aptitude", questions: 50 }
+        ]
+      }
+    ];
+
+    // Procedural question generator matching the test formats
+    function generateExamQuestions(exam) {
+      const questions = [];
+      let qNum = 1;
+
+      exam.sections.forEach((section) => {
+        for (let i = 0; i < section.questions; i++) {
+          const a = Math.floor(Math.random() * 50) + 12;
+          const b = Math.floor(Math.random() * 30) + 5;
+          const ans = a + b;
+          const options = [
+            ans.toString(),
+            (ans + 3).toString(),
+            (ans - 4).toString(),
+            (ans + 7).toString()
+          ].sort(() => Math.random() - 0.5);
+
+          questions.push({
+            id: qNum,
+            section: section.name,
+            text: `Question ${qNum}: For ${section.name}, evaluate the following problem statement:\nIf value P = ${a} and value Q = ${b}, what is the resulting sum of (P + Q)?`,
+            options: options,
+            correct: options.indexOf(ans.toString()),
+            explanation: `Direct evaluation: ${a} + ${b} = ${ans}. Therefore, option ${String.fromCharCode(65 + options.indexOf(ans.toString()))} is correct.`
+          });
+          qNum++;
+        }
+      });
+      return questions;
+    }
+
+    function formatTime(totalSec) {
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      const pad = (n) => String(n).padStart(2, "0");
+      return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+    }
+
+    function App() {
+      const [view, setView] = useState("dashboard");
+      const [selectedExam, setSelectedExam] = useState(null);
+      const [questions, setQuestions] = useState([]);
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [answers, setAnswers] = useState({});
+      const [marked, setMarked] = useState({});
+      const [timeLeft, setTimeLeft] = useState(0);
+      const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+      const [showSubmitModal, setShowSubmitModal] = useState(false);
+      const [result, setResult] = useState(null);
+
+      // Countdown Timer
+      useEffect(() => {
+        if (view !== "exam" || timeLeft <= 0) return;
+        const interval = setInterval(() => {
+          setTimeLeft((prev) => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              handleSubmitExam();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        return () => clearInterval(interval);
+      }, [view, timeLeft]);
+
+      const handleSelectExam = (exam) => {
+        setSelectedExam(exam);
+        setView("intro");
+      };
+
+      const handleStartExam = () => {
+        const qList = generateExamQuestions(selectedExam);
+        setQuestions(qList);
+        setCurrentIndex(0);
+        setAnswers({});
+        setMarked({});
+        setTimeLeft(selectedExam.duration);
+        setView("exam");
+      };
+
+      const handleSelectOption = (idx) => {
+        setAnswers({ ...answers, [currentIndex]: idx });
+      };
+
+      const handleToggleMark = () => {
+        setMarked({ ...marked, [currentIndex]: !marked[currentIndex] });
+      };
+
+      const handleClear = () => {
+        const updated = { ...answers };
+        delete updated[currentIndex];
+        setAnswers(updated);
+      };
+
+      const handleSubmitExam = () => {
+        setShowSubmitModal(false);
+        let correctCount = 0;
+        let wrongCount = 0;
+        let unattemptedCount = 0;
+
+        questions.forEach((q, idx) => {
+          if (answers[idx] !== undefined) {
+            if (answers[idx] === q.correct) {
+              correctCount++;
+            } else {
+              wrongCount++;
+            }
+          } else {
+            unattemptedCount++;
+          }
+        });
+
+        const marksObtained =
+          correctCount * selectedExam.marking.correct +
+          wrongCount * selectedExam.marking.wrong;
+        const totalMarks = questions.length * selectedExam.marking.correct;
+        const percentage = Math.max(0, (marksObtained / totalMarks) * 100).toFixed(1);
+
+        setResult({
+          correct: correctCount,
+          wrong: wrongCount,
+          unattempted: unattemptedCount,
+          score: marksObtained.toFixed(2),
+          totalMarks: totalMarks,
+          percentage: percentage
+        });
+        setView("result");
+      };
+
+      const getStatusClass = (idx) => {
+        const isAnswered = answers[idx] !== undefined;
+        const isMarkedReview = marked[idx];
+
+        if (isAnswered && isMarkedReview) return "answered-marked";
+        if (isMarkedReview) return "marked";
+        if (isAnswered) return "answered";
+        return idx === currentIndex ? "not-answered" : "not-visited";
+      };
+
+      return (
+        <div className="app-shell">
+          <header className="site-header">
+            <div className="brand" onClick={() => setView("dashboard")}>
+              <span className="brand-name">ScoreBooster</span>
+              <span className="brand-sub">Exam Simulation Engine</span>
+            </div>
+          </header>
+
+          {/* VIEW: DASHBOARD */}
+          {view === "dashboard" && (
+            <main className="dashboard">
+              <h1 className="dashboard-heading">Available Mock Exams</h1>
+              <p className="dashboard-subheading">Select an exam to simulate real-time computer-based testing.</p>
+
+              <div className="exam-grid">
+                {EXAMS.map((exam) => (
+                  <div key={exam.id} className="exam-card">
+                    <div className="exam-card-top">
+                      <h2 className="exam-card-name">{exam.name}</h2>
+                      <span className="exam-card-badge">{exam.badge}</span>
+                    </div>
+                    <p className="exam-card-desc">{exam.description}</p>
+                    <div className="exam-card-meta">
+                      <span>{exam.sections.reduce((a, b) => a + b.questions, 0)} Questions</span>
+                      <span>{Math.floor(exam.duration / 60)} Mins</span>
+                      <span>+{exam.marking.correct} / {exam.marking.wrong} Marks</span>
+                    </div>
+                    <button className="btn btn-primary btn-block" onClick={() => handleSelectExam(exam)}>
+                      Start Test
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </main>
+          )}
+
+          {/* VIEW: INTRO */}
+          {view === "intro" && selectedExam && (
+            <main className="intro-wrap">
+              <div className="intro-card">
+                <span className="exam-card-badge">{selectedExam.badge}</span>
+                <h1 className="intro-title">{selectedExam.name}</h1>
+                <p className="intro-note">
+                  Please read the instructions carefully before initiating the mock session.
+                </p>
+                <div className="intro-grid">
+                  <div className="intro-stat">
+                    <div className="intro-stat-label">Total Questions</div>
+                    <div className="intro-stat-value">
+                      {selectedExam.sections.reduce((a, b) => a + b.questions, 0)}
+                    </div>
+                  </div>
+                  <div className="intro-stat">
+                    <div className="intro-stat-label">Duration</div>
+                    <div className="intro-stat-value">{Math.floor(selectedExam.duration / 60)} Minutes</div>
+                  </div>
+                  <div className="intro-stat">
+                    <div className="intro-stat-label">Positive Mark</div>
+                    <div className="intro-stat-value">+{selectedExam.marking.correct}</div>
+                  </div>
+                  <div className="intro-stat">
+                    <div className="intro-stat-label">Negative Mark</div>
+                    <div className="intro-stat-value">{selectedExam.marking.wrong}</div>
+                  </div>
+                </div>
+                <div className="intro-sections">
+                  <strong>Sections:</strong>
+                  <ul>
+                    {selectedExam.sections.map((s, i) => (
+                      <li key={i}>{s.name} ({s.questions} Questions)</li>
+                    ))}
+                  </ul>
+                </div>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  <button className="btn btn-secondary" onClick={() => setView("dashboard")}>
+                    Back
+                  </button>
+                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleStartExam}>
+                    Proceed to Exam
+                  </button>
+                </div>
+              </div>
+            </main>
+          )}
+
+          {/* VIEW: EXAM */}
+          {view === "exam" && questions.length > 0 && (
+            <div className="exam-shell">
+              <header className="exam-topbar">
+                <div className="exam-topbar-left">
+                  <span className="exam-topbar-name">{selectedExam.name}</span>
+                  <span className="exam-topbar-progress">
+                    Question {currentIndex + 1} of {questions.length} ({questions[currentIndex].section})
+                  </span>
+                </div>
+                <div className={`exam-timer ${timeLeft < 300 ? "timer-critical" : timeLeft < 600 ? "timer-warning" : ""}`}>
+                  ⏱ {formatTime(timeLeft)}
+                </div>
+                <button className="btn btn-secondary btn-sm palette-mobile-toggle" onClick={() => setIsPaletteOpen(!isPaletteOpen)}>
+                  Question Palette
+                </button>
+              </header>
+
+              <div className="exam-body">
+                <main className="exam-main">
+                  <div className="question-card">
+                    <div className="question-meta-row">
+                      <span className="question-number-badge">Question {currentIndex + 1}</span>
+                      <div className="question-tags">
+                        <span className="tag">+{selectedExam.marking.correct}</span>
+                        <span className="tag">{selectedExam.marking.wrong}</span>
+                      </div>
+                    </div>
+
+                    <div className="question-text">{questions[currentIndex].text}</div>
+
+                    <div className="options-list">
+                      {questions[currentIndex].options.map((opt, oIdx) => (
+                        <div
+                          key={oIdx}
+                          className={`option-row ${answers[currentIndex] === oIdx ? "selected" : ""}`}
+                          onClick={() => handleSelectOption(oIdx)}
+                        >
+                          <span className="option-letter">{String.fromCharCode(65 + oIdx)}</span>
+                          <span className="option-label">{opt}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="question-actions">
+                      <div className="question-actions-left">
+                        <button className="btn btn-secondary btn-sm" onClick={handleToggleMark}>
+                          {marked[currentIndex] ? "Unmark Review" : "Mark for Review"}
+                        </button>
+                        <button className="btn btn-ghost btn-sm" onClick={handleClear}>
+                          Clear Response
+                        </button>
+                      </div>
+                      <div className="question-actions-right">
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          disabled={currentIndex === 0}
+                          onClick={() => setCurrentIndex(currentIndex - 1)}
+                        >
+                          Previous
+                        </button>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          disabled={currentIndex === questions.length - 1}
+                          onClick={() => setCurrentIndex(currentIndex + 1)}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </main>
+
+                <aside className={`palette-panel ${isPaletteOpen ? "open" : ""}`}>
+                  <div className="palette-legend">
+                    <div className="legend-item">
+                      <div className="legend-dot" style={{ background: "var(--success)" }}></div> Answered
+                    </div>
+                    <div className="legend-item">
+                      <div className="legend-dot" style={{ background: "var(--danger)" }}></div> Not Answered
+                    </div>
+                    <div className="legend-item">
+                      <div className="legend-dot" style={{ background: "var(--accent)" }}></div> Marked for Review
+                    </div>
+                    <div className="legend-item">
+                      <div className="legend-dot" style={{ background: "var(--surface-2)" }}></div> Not Visited
+                    </div>
+                  </div>
+
+                  <div className="palette-grid">
+                    {questions.map((_, i) => (
+                      <div
+                        key={i}
+                        className={`palette-cell ${getStatusClass(i)} ${i === currentIndex ? "current" : ""}`}
+                        onClick={() => {
+                          setCurrentIndex(i);
+                          setIsPaletteOpen(false);
+                        }}
+                      >
+                        {i + 1}
+                      </div>
+                    ))}
+                  </div>
+
+                  <button className="btn btn-danger submit-summary-btn" onClick={() => setShowSubmitModal(true)}>
+                    Submit Exam
+                  </button>
+                </aside>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: RESULTS */}
+          {view === "result" && result && (
+            <main className="result-wrap">
+              <div className="result-hero">
+                <span className="result-hero-badge">Exam Completed</span>
+                <h1 className="result-score">{result.score} / {result.totalMarks}</h1>
+                <div className="result-percentage">{result.percentage}% Aggregate Score</div>
+                <div className="result-score-sub">{selectedExam.name}</div>
+              </div>
+
+              <div className="result-grid">
+                <div className="result-stat-card correct">
+                  <div className="result-stat-value">{result.correct}</div>
+                  <div className="result-stat-label">Correct</div>
+                </div>
+                <div className="result-stat-card wrong">
+                  <div className="result-stat-value">{result.wrong}</div>
+                  <div className="result-stat-label">Wrong</div>
+                </div>
+                <div className="result-stat-card unattempted">
+                  <div className="result-stat-value">{result.unattempted}</div>
+                  <div className="result-stat-label">Unattempted</div>
+                </div>
+              </div>
+
+              <div className="result-actions">
+                <button className="btn btn-primary" onClick={() => setView("dashboard")}>
+                  Return to Dashboard
+                </button>
+                <button className="btn btn-secondary" onClick={handleStartExam}>
+                  Retake Exam
+                </button>
+              </div>
+
+              <div className="solutions-list">
+                <h3>Detailed Solutions</h3>
+                {questions.map((q, idx) => (
+                  <div key={idx} className="solution-card">
+                    <div className="solution-question">{q.text}</div>
+                    <div className={`solution-answer-row ${answers[idx] === q.correct ? "correct-answer" : "wrong-answer"}`}>
+                      Your Answer: {answers[idx] !== undefined ? String.fromCharCode(65 + answers[idx]) : "Not Attempted"}
+                    </div>
+                    <div className="solution-answer-row correct-answer">
+                      Correct Answer: {String.fromCharCode(65 + q.correct)} ({q.options[q.correct]})
+                    </div
